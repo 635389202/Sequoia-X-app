@@ -130,4 +130,23 @@ Sequoia-X/
 
 ## 许可证 | License
 
+## GitHub Release Data Publish
+
+Daily public Android data packages can be published to the user's fork:
+
+```powershell
+$env:GITHUB_TOKEN="..."
+python publish_daily_release.py --repository 635389202/Sequoia-X-app
+```
+
+For local validation without upload:
+
+```powershell
+python publish_daily_release.py --skip-update --skip-strategy --dry-run
+```
+
+---
+
+## 璁稿彲璇?| License
+
 MIT
