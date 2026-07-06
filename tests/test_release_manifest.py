@@ -34,6 +34,23 @@ def test_build_release_manifest_delta_only(tmp_path: Path):
     assert manifest["sha256"][delta.name] == sha256_file(delta)
 
 
+def test_build_release_manifest_accepts_positional_arguments(tmp_path: Path):
+    delta = tmp_path / "sequoia_app_delta_2026-07-06.zip"
+    delta.write_bytes(b"delta")
+
+    manifest = build_release_manifest(
+        "2026-07-06",
+        delta.name,
+        delta,
+        110,
+        generated_at="2026-07-06T19:15:00+08:00",
+    )
+
+    assert manifest["date"] == "2026-07-06"
+    assert manifest["candidate_count"] == 110
+    assert manifest["delta_asset"] == delta.name
+
+
 def test_build_release_manifest_with_full_asset(tmp_path: Path):
     delta = tmp_path / "sequoia_app_delta_2026-07-06.zip"
     full = tmp_path / "sequoia_app_data_latest.zip"

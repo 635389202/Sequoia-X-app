@@ -15,7 +15,6 @@ def sha256_file(path: Path) -> str:
 
 
 def build_release_manifest(
-    *,
     date: str,
     delta_asset: str,
     delta_path: Path,
