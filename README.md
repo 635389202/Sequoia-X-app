@@ -145,6 +145,16 @@ For local validation without upload:
 python publish_daily_release.py --skip-update --skip-strategy --dry-run
 ```
 
+### GitHub Actions Daily Publish
+
+`.github/workflows/publish-daily-data.yml` publishes Android data packages automatically.
+
+- Schedule: weekdays at `10:10 UTC`, which is `18:10 Asia/Shanghai`.
+- Manual run: GitHub repo -> `Actions` -> `Publish Daily App Data` -> `Run workflow`.
+- Optional manual input: `date`, for example `2026-07-06`.
+- Release permission: the workflow uses the repository `GITHUB_TOKEN` with `contents: write`.
+- Notification side effects: disabled by `main.py --skip-sync --skip-notify` inside `publish_daily_release.py`.
+
 ---
 
 ## 璁稿彲璇?| License
