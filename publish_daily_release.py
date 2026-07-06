@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 import requests
 
+from export_app_data import export_package as export_full_package
 from export_app_delta import export_delta_package
 from release_manifest import build_release_manifest
 from sequoia_x.core.config import get_settings
@@ -104,6 +105,7 @@ def main() -> int:
     parser.add_argument("--export-dir", default="exports/app")
     parser.add_argument("--skip-update", action="store_true")
     parser.add_argument("--skip-strategy", action="store_true")
+    parser.add_argument("--include-full", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -115,17 +117,27 @@ def main() -> int:
 
     export_dir = Path(args.export_dir)
     delta_zip = export_delta_package(Path(args.db_path), Path(args.output_dir), export_dir, args.date)
+    full_zip = None
+    if args.include_full:
+        full_zip = export_full_package(Path(args.db_path), Path(args.output_dir), export_dir)
     latest_date = args.date or delta_zip.stem.removeprefix("sequoia_app_delta_")
     manifest = build_release_manifest(
         date=latest_date,
         delta_asset=delta_zip.name,
         delta_path=delta_zip,
         candidate_count=count_candidates_from_zip_manifest(delta_zip),
+        full_asset=full_zip.name if full_zip else None,
+        full_path=full_zip,
     )
     manifest_path = write_manifest_file(export_dir, manifest)
+    release_assets = [manifest_path, delta_zip]
+    if full_zip:
+        release_assets.append(full_zip)
 
     if args.dry_run:
-        print(f"Dry run release data: {manifest_path} {delta_zip}")
+        print("Dry run release data:")
+        for asset in release_assets:
+            print(asset)
         return 0
 
     token = os.environ.get("GITHUB_TOKEN")
@@ -135,8 +147,8 @@ def main() -> int:
     publisher = GitHubReleasePublisher(args.repository, token)
     tag = f"data-{latest_date}"
     release = publisher.create_or_update_release(tag, f"Sequoia-X Data {latest_date}")
-    publisher.upload_asset(int(release["id"]), manifest_path)
-    publisher.upload_asset(int(release["id"]), delta_zip)
+    for asset in release_assets:
+        publisher.upload_asset(int(release["id"]), asset)
     print(f"Published {release.get('html_url')}")
     return 0
 

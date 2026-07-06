@@ -75,6 +75,12 @@ def _fake_delta_zip(tmp_path: Path) -> Path:
     return path
 
 
+def _fake_full_zip(tmp_path: Path) -> Path:
+    path = tmp_path / "sequoia_app_data_2026-07-06.zip"
+    path.write_bytes(b"full")
+    return path
+
+
 def test_main_dry_run_does_not_require_token_or_touch_github(tmp_path: Path, monkeypatch, capsys):
     delta = _fake_delta_zip(tmp_path)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
@@ -160,3 +166,80 @@ def test_main_strategy_subprocess_skips_notify(tmp_path: Path, monkeypatch):
     assert publish_daily_release.main() == 0
 
     assert commands == [[sys.executable, "main.py", "--skip-sync", "--skip-notify"]]
+
+
+def test_main_include_full_adds_full_asset_to_manifest(tmp_path: Path, monkeypatch, capsys):
+    delta = _fake_delta_zip(tmp_path)
+    full = _fake_full_zip(tmp_path)
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "export_full_package", lambda *args, **kwargs: full)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(publish_daily_release, "_run_checked", lambda args: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-update",
+            "--skip-strategy",
+            "--dry-run",
+            "--include-full",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    assert publish_daily_release.main() == 0
+
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["full_asset"] == full.name
+    assert full.name in manifest["sha256"]
+    output = capsys.readouterr().out
+    assert delta.name in output
+    assert full.name in output
+
+
+def test_main_real_publish_uploads_full_asset_when_included(tmp_path: Path, monkeypatch):
+    delta = _fake_delta_zip(tmp_path)
+    full = _fake_full_zip(tmp_path)
+    uploaded: list[str] = []
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "export_full_package", lambda *args, **kwargs: full)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(publish_daily_release, "_run_checked", lambda args: None)
+
+    class RecordingPublisher:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def create_or_update_release(self, tag_name, title):
+            return {"id": 123, "html_url": "https://github.com/r/releases/tag/data-2026-07-06"}
+
+        def upload_asset(self, release_id, path):
+            uploaded.append(path.name)
+            return {"name": path.name}
+
+    monkeypatch.setattr(publish_daily_release, "GitHubReleasePublisher", RecordingPublisher)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-update",
+            "--skip-strategy",
+            "--include-full",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    assert publish_daily_release.main() == 0
+
+    assert uploaded == ["manifest.json", delta.name, full.name]

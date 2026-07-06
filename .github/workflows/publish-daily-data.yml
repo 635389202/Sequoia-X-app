@@ -7,6 +7,11 @@ on:
         description: "Optional trading date, for example 2026-07-06"
         required: false
         type: string
+      include_full:
+        description: "Also upload a full Android data package for first-time installs"
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '10 10 * * 1-5'
 
@@ -24,6 +29,7 @@ jobs:
       FEISHU_WEBHOOK_URL: https://example.invalid/skip-notify
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PUBLISH_DATE: ${{ inputs.date }}
+      PUBLISH_INCLUDE_FULL: ${{ inputs.include_full }}
       PYTHONUTF8: "1"
 
     steps:
@@ -43,8 +49,12 @@ jobs:
 
       - name: Publish app data release
         run: |
+          EXTRA_ARGS=""
+          if [ "$PUBLISH_INCLUDE_FULL" = "true" ]; then
+            EXTRA_ARGS="--include-full"
+          fi
           if [ -n "$PUBLISH_DATE" ]; then
-            python publish_daily_release.py --repository "$GITHUB_REPOSITORY" --date "$PUBLISH_DATE"
+            python publish_daily_release.py --repository "$GITHUB_REPOSITORY" --date "$PUBLISH_DATE" $EXTRA_ARGS
           else
-            python publish_daily_release.py --repository "$GITHUB_REPOSITORY"
+            python publish_daily_release.py --repository "$GITHUB_REPOSITORY" $EXTRA_ARGS
           fi

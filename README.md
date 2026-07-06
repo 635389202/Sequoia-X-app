@@ -152,6 +152,7 @@ python publish_daily_release.py --skip-update --skip-strategy --dry-run
 - Schedule: weekdays at `10:10 UTC`, which is `18:10 Asia/Shanghai`.
 - Manual run: GitHub repo -> `Actions` -> `Publish Daily App Data` -> `Run workflow`.
 - Optional manual input: `date`, for example `2026-07-06`.
+- Optional manual input: enable `include_full` when a first-time Android install needs to bootstrap from GitHub.
 - Release permission: the workflow uses the repository `GITHUB_TOKEN` with `contents: write`.
 - Notification side effects: disabled by `main.py --skip-sync --skip-notify` inside `publish_daily_release.py`.
 

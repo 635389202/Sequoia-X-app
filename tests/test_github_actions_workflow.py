@@ -12,3 +12,6 @@ def test_daily_data_publish_workflow_is_configured_for_release_publishing():
     assert "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}" in content
     assert "FEISHU_WEBHOOK_URL: https://example.invalid/skip-notify" in content
     assert "publish_daily_release.py" in content
+    assert "include_full:" in content
+    assert "PUBLISH_INCLUDE_FULL: ${{ inputs.include_full }}" in content
+    assert "--include-full" in content
