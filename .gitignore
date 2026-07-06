@@ -15,6 +15,7 @@ ENV/
 .idea/
 .vscode/
 .kiro
+.superpowers/
 
 # 数据库文件
 data/*.db
