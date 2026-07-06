@@ -1,6 +1,10 @@
 import json
+import sys
 from pathlib import Path
 
+import pytest
+
+import publish_daily_release
 from publish_daily_release import GitHubReleasePublisher, write_manifest_file
 
 
@@ -63,3 +67,96 @@ def test_upload_asset_deletes_existing_asset_before_upload(tmp_path: Path):
 
     assert result["name"] == "manifest.json"
     assert [call[0] for call in calls] == ["GET", "DELETE", "POST"]
+
+
+def _fake_delta_zip(tmp_path: Path) -> Path:
+    path = tmp_path / "sequoia_app_delta_2026-07-06.zip"
+    path.write_bytes(b"delta")
+    return path
+
+
+def test_main_dry_run_does_not_require_token_or_touch_github(tmp_path: Path, monkeypatch, capsys):
+    delta = _fake_delta_zip(tmp_path)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(publish_daily_release, "_run_checked", lambda args: None)
+    github_created = False
+
+    class FailingPublisher:
+        def __init__(self, *args, **kwargs):
+            nonlocal github_created
+            github_created = True
+
+    monkeypatch.setattr(publish_daily_release, "GitHubReleasePublisher", FailingPublisher)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-update",
+            "--skip-strategy",
+            "--dry-run",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    assert publish_daily_release.main() == 0
+
+    assert not github_created
+    assert (tmp_path / "manifest.json").exists()
+    assert "Dry run release data:" in capsys.readouterr().out
+
+
+def test_main_real_publish_requires_github_token(tmp_path: Path, monkeypatch):
+    delta = _fake_delta_zip(tmp_path)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-update",
+            "--skip-strategy",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="GITHUB_TOKEN is required"):
+        publish_daily_release.main()
+
+
+def test_main_strategy_subprocess_skips_notify(tmp_path: Path, monkeypatch):
+    delta = _fake_delta_zip(tmp_path)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(publish_daily_release, "_run_checked", lambda args: commands.append(args))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-update",
+            "--dry-run",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    assert publish_daily_release.main() == 0
+
+    assert commands == [[sys.executable, "main.py", "--skip-sync", "--skip-notify"]]

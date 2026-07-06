@@ -111,7 +111,7 @@ def main() -> int:
     if not args.skip_update:
         _run_checked([python, "update_today_data.py"])
     if not args.skip_strategy:
-        _run_checked([python, "main.py", "--skip-sync"])
+        _run_checked([python, "main.py", "--skip-sync", "--skip-notify"])
 
     export_dir = Path(args.export_dir)
     delta_zip = export_delta_package(Path(args.db_path), Path(args.output_dir), export_dir, args.date)

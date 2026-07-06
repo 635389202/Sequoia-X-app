@@ -57,3 +57,39 @@ def test_main_skip_sync_runs_strategies_without_fetching() -> None:
     engine.sync_today_bulk.assert_not_called()
     assert strategy.run.call_count == 7
     notifier.send.assert_called()
+
+
+def test_main_skip_notify_runs_strategies_without_notifying() -> None:
+    engine = Mock()
+    logger = Mock()
+    notifier = Mock()
+    selected = ["sh.600000"]
+    strategy = Mock()
+    strategy.run.return_value = selected
+    strategy.webhook_key = "webhook"
+    strategy.__class__.__name__ = "MockStrategy"
+
+    with patch.object(main_module, "get_settings", return_value=object()), patch.object(
+        main_module, "get_logger", return_value=logger
+    ), patch.object(main_module, "DataEngine", return_value=engine), patch.object(
+        main_module, "FeishuNotifier", return_value=notifier
+    ), patch.object(
+        main_module, "MaVolumeStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "TurtleTradeStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "HighTightFlagStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "LimitUpShakeoutStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "UptrendLimitDownStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "RpsBreakoutStrategy", return_value=strategy
+    ), patch.object(
+        main_module, "PrivatePlacementStrategy", return_value=strategy
+    ), patch.object(sys, "argv", ["main.py", "--skip-sync", "--skip-notify"]):
+        main_module.main()
+
+    engine.sync_today_bulk.assert_not_called()
+    assert strategy.run.call_count == 7
+    notifier.send.assert_not_called()

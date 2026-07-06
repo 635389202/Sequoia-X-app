@@ -37,6 +37,11 @@ def main() -> None:
         action="store_true",
         help="Skip the daily market sync and only run strategies against local data.",
     )
+    parser.add_argument(
+        "--skip-notify",
+        action="store_true",
+        help="Skip Feishu notifications after strategy output is generated.",
+    )
     args = parser.parse_args()
 
     try:
@@ -70,7 +75,7 @@ def main() -> None:
             PrivatePlacementStrategy(engine=engine, settings=settings),
         ]
 
-        notifier = FeishuNotifier(settings)
+        notifier = None if args.skip_notify else FeishuNotifier(settings)
 
         for strategy in strategies:
             strategy_name = type(strategy).__name__
@@ -79,12 +84,14 @@ def main() -> None:
             selected: list[str] = strategy.run()
             logger.info("%s selected %s symbols", strategy_name, len(selected))
 
-            if selected:
+            if selected and notifier is not None:
                 notifier.send(
                     symbols=selected,
                     strategy_name=strategy_name,
                     webhook_key=strategy.webhook_key,
                 )
+            elif selected:
+                logger.info("%s notifications skipped for %s symbols", strategy_name, len(selected))
             else:
                 logger.info("%s returned no symbols", strategy_name)
 
