@@ -13,7 +13,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class ZipPackageImporterTest {
     private lateinit var db: AppDatabase
 
@@ -36,7 +39,7 @@ class ZipPackageImporterTest {
 
         val summary = importer.importPackage(ByteArrayInputStream(sampleZip()), "sample.zip")
         val latestDate = db.displayRowDao().latestDate()
-        val rows = db.displayRowDao().queryRows("2026-07-01", "", "", "price_asc")
+        val rows = db.displayRowDao().queryRows("2026-07-01", "", "", "price_asc", 50, 0)
 
         assertEquals("2026-07-01", summary.latestDate)
         assertEquals("2026-07-01", latestDate)

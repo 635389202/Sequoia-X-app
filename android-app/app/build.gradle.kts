@@ -50,6 +50,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     ksp("androidx.room:room-compiler:2.6.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -58,4 +59,32 @@ dependencies {
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.robolectric:robolectric:4.13")
+}
+
+afterEvaluate {
+    tasks.named<Test>("testDebugUnitTest") {
+        val asciiTestClassesDir = file("C:/Temp/SequoiaX/android-test-classes/debugUnitTest")
+        val asciiMainClassesDir = file("C:/Temp/SequoiaX/android-main-classes/debug")
+        val asciiMainJavaClassesDir = file("C:/Temp/SequoiaX/android-main-java-classes/debug")
+        testClassesDirs = files(asciiTestClassesDir)
+        classpath = files(asciiTestClassesDir, asciiMainClassesDir, asciiMainJavaClassesDir).plus(classpath)
+        doFirst {
+            delete(asciiTestClassesDir)
+            delete(asciiMainClassesDir)
+            delete(asciiMainJavaClassesDir)
+            copy {
+                from(layout.buildDirectory.dir("tmp/kotlin-classes/debugUnitTest"))
+                into(asciiTestClassesDir)
+            }
+            copy {
+                from(layout.buildDirectory.dir("tmp/kotlin-classes/debug"))
+                into(asciiMainClassesDir)
+            }
+            copy {
+                from(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"))
+                into(asciiMainJavaClassesDir)
+            }
+        }
+    }
 }

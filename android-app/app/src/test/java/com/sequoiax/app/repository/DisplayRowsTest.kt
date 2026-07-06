@@ -10,7 +10,10 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class DisplayRowsTest {
     private lateinit var db: AppDatabase
 
@@ -36,8 +39,8 @@ class DisplayRowsTest {
             )
         )
 
-        val highToLow = db.displayRowDao().queryRows("2026-07-01", "", "", SortMode.PriceDesc.value)
-        val lowToHigh = db.displayRowDao().queryRows("2026-07-01", "", "", SortMode.PriceAsc.value)
+        val highToLow = db.displayRowDao().queryRows("2026-07-01", "", "", SortMode.PriceDesc.value, 50, 0)
+        val lowToHigh = db.displayRowDao().queryRows("2026-07-01", "", "", SortMode.PriceAsc.value, 50, 0)
 
         assertEquals(listOf("688361", "600601"), highToLow.map { it.symbol })
         assertEquals(listOf("600601", "688361"), lowToHigh.map { it.symbol })
