@@ -1,6 +1,7 @@
 """数据引擎模块：负责 SQLite 行情数据存储与 baostock 增量同步。"""
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +10,8 @@ from sequoia_x.core.config import Settings
 from sequoia_x.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+BAOSTOCK_ADJUST_FLAG = "3"  # 不复权，保持看板展示为真实交易价格
 
 
 _CREATE_TABLE_SQL = """
@@ -33,23 +36,32 @@ CREATE INDEX IF NOT EXISTS idx_symbol_date ON stock_daily (symbol, date);
 
 def _bs_fetch_batch(tasks: list) -> list:
     """多进程 worker：独立 login，批量拉取 baostock 数据。"""
+    import socket
+
     import baostock as bs
+
+    socket.setdefaulttimeout(10.0)
     bs.login()
     results = []
-    for symbol, bs_code, start, end in tasks:
-        rs = bs.query_history_k_data_plus(
-            bs_code,
-            "date,open,high,low,close,volume,amount",
-            start_date=start,
-            end_date=end,
-            frequency="d",
-            adjustflag="1",  # 后复权
-        )
-        if rs.error_code != "0":
-            continue
-        while rs.next():
-            results.append([symbol] + rs.get_row_data())
-    bs.logout()
+    try:
+        for symbol, bs_code, start, end in tasks:
+            try:
+                rs = bs.query_history_k_data_plus(
+                    bs_code,
+                    "date,open,high,low,close,volume,amount",
+                    start_date=start,
+                    end_date=end,
+                    frequency="d",
+                    adjustflag=BAOSTOCK_ADJUST_FLAG,
+                )
+                if rs.error_code != "0":
+                    continue
+                while rs.next():
+                    results.append([symbol] + rs.get_row_data())
+            except Exception:
+                continue
+    finally:
+        bs.logout()
     return results
 
 
@@ -63,14 +75,14 @@ class DataEngine:
 
     def _init_db(self) -> None:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             conn.execute(_CREATE_TABLE_SQL)
             conn.execute(_CREATE_INDEX_SQL)
             conn.commit()
         logger.info(f"数据库初始化完成：{self.db_path}")
 
     def _get_last_date(self, symbol: str) -> str | None:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             row = conn.execute(
                 "SELECT MAX(date) FROM stock_daily WHERE symbol = ?",
                 (symbol,),
@@ -78,7 +90,7 @@ class DataEngine:
         return row[0] if row and row[0] else None
 
     def get_ohlcv(self, symbol: str) -> pd.DataFrame:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             df = pd.read_sql(
                 "SELECT * FROM stock_daily WHERE symbol = ? ORDER BY date",
                 conn,
@@ -94,15 +106,15 @@ class DataEngine:
 
     # ── 数据同步 ──
 
-    def sync_today_bulk(self) -> int:
-        """多进程并行通过 baostock 拉取增量数据（后复权），写入 SQLite。"""
+    def sync_today_bulk(self, target_date: str | None = None) -> int:
+        """多进程并行通过 baostock 拉取增量数据（不复权），写入 SQLite。"""
         from datetime import date, timedelta
         from multiprocessing import Pool
 
-        today_str = date.today().strftime("%Y-%m-%d")
+        today_str = target_date or date.today().strftime("%Y-%m-%d")
 
         tasks = []
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             rows = conn.execute(
                 "SELECT symbol, MAX(date) FROM stock_daily GROUP BY symbol"
             ).fetchall()
@@ -125,11 +137,12 @@ class DataEngine:
 
         logger.info(f"需要更新 {len(tasks)} 只股票，启动多进程并行拉取...")
 
-        n_workers = min(8, len(tasks))
-        chunks = [tasks[i::n_workers] for i in range(n_workers)]
+        batch_size = 48
+        chunks = [tasks[i : i + batch_size] for i in range(0, len(tasks), batch_size)]
+        n_workers = min(8, len(chunks))
 
-        with Pool(n_workers) as pool:
-            batch_results = pool.map(_bs_fetch_batch, chunks)
+        with Pool(n_workers, maxtasksperchild=8) as pool:
+            batch_results = list(pool.imap_unordered(_bs_fetch_batch, chunks))
 
         all_rows = []
         for batch in batch_results:
@@ -146,7 +159,7 @@ class DataEngine:
         df = df[df["volume"] > 0]
 
         count = len(df)
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             for d in df["date"].unique().tolist():
                 conn.execute("DELETE FROM stock_daily WHERE date = ?", (d,))
             df.to_sql("stock_daily", conn, if_exists="append", index=False, method="multi", chunksize=500)
@@ -156,7 +169,7 @@ class DataEngine:
         return count
 
     def backfill(self, symbols: list[str]) -> None:
-        """通过 baostock 批量回填历史日 K 线数据（后复权）。
+        """通过 baostock 批量回填历史日 K 线数据（不复权）。
 
         容错机制：
         - 单只股票失败自动重试 3 次，间隔递增（2s/4s/8s）
@@ -226,7 +239,7 @@ class DataEngine:
                             start_date=start,
                             end_date=today_str,
                             frequency="d",
-                            adjustflag="1",  # 后复权
+                            adjustflag=BAOSTOCK_ADJUST_FLAG,
                         )
 
                         if rs.error_code != "0":
@@ -275,7 +288,7 @@ class DataEngine:
                 df = df[["symbol", "date", "open", "high", "low", "close", "volume", "turnover"]]
 
                 try:
-                    with sqlite3.connect(self.db_path) as conn:
+                    with closing(sqlite3.connect(self.db_path)) as conn:
                         df.to_sql(
                             "stock_daily", conn, if_exists="append",
                             index=False, method="multi", chunksize=500,
@@ -326,7 +339,7 @@ class DataEngine:
             bs.logout()
 
     def get_local_symbols(self) -> list[str]:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             rows = conn.execute(
                 "SELECT DISTINCT symbol FROM stock_daily"
             ).fetchall()

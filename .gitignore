@@ -26,6 +26,18 @@ data/*.db
 *.egg-info/
 dist/
 build/
+exports/
+outputs/
+选股结果_*.md
+选股结果_*.csv
+*.apk
+*.zip
+
+# Android 本地构建与工具链
+android-app/.gradle/
+android-app/.tooling/
+android-app/**/build/
+android-app/local.properties
 
 # 测试与工具缓存
 .pytest_cache/

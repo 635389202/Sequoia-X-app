@@ -54,7 +54,11 @@ class FeishuNotifier:
 
     def _build_card(self, symbols: list[str], strategy_name: str) -> dict:
         today = date.today().strftime("%Y-%m-%d")
-        names = self._get_stock_names(symbols)
+        names = (
+            self._get_stock_names(symbols)
+            if self.settings.feishu_include_stock_names
+            else {}
+        )
 
         links: list[str] = []
         for code in symbols:
