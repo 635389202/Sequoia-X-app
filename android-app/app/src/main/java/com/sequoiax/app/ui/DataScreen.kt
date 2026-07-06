@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Button
@@ -79,7 +80,14 @@ fun DataScreen(
                     Icon(Icons.Filled.UploadFile, contentDescription = null)
                     Text("导入数据包")
                 }
-                if (state.isImporting) {
+                OutlinedButton(
+                    onClick = { viewModel.syncFromGitHubRelease() },
+                    enabled = !state.isImporting && !state.isSyncingRemote,
+                ) {
+                    Icon(Icons.Filled.CloudSync, contentDescription = null)
+                    Text("检查 GitHub 更新")
+                }
+                if (state.isImporting || state.isSyncingRemote) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 if (state.message.isNotEmpty()) {

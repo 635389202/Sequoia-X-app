@@ -28,6 +28,7 @@ data class HomeUiState(
     val canLoadMoreRows: Boolean = false,
     val batches: List<ImportBatchEntity> = emptyList(),
     val isImporting: Boolean = false,
+    val isSyncingRemote: Boolean = false,
     val message: String = "",
 )
 
@@ -133,6 +134,29 @@ class AppViewModel(private val repository: StockRepository) : ViewModel() {
                 refresh()
             } catch (exc: Exception) {
                 _home.update { it.copy(isImporting = false, message = "导入失败：${exc.message ?: "未知错误"}") }
+            }
+        }
+    }
+
+    fun syncFromGitHubRelease() {
+        viewModelScope.launch {
+            _home.update { it.copy(isSyncingRemote = true, message = "正在检查 GitHub 更新") }
+            try {
+                val localDate = _home.value.latestDate.ifBlank { null }
+                val summary = withContext(Dispatchers.IO) {
+                    repository.syncFromGitHubRelease(localDate)
+                }
+                val message = if (summary.packageType == "current") {
+                    "已经是最新数据：${summary.latestDate}"
+                } else {
+                    "GitHub 同步完成：${summary.latestDate}，结果${summary.resultRows}条，日线${summary.stockDailyRows}条"
+                }
+                _home.update { it.copy(isSyncingRemote = false, message = message) }
+                refresh()
+            } catch (exc: Exception) {
+                _home.update {
+                    it.copy(isSyncingRemote = false, message = "GitHub 同步失败：${exc.message ?: "未知错误"}")
+                }
             }
         }
     }
