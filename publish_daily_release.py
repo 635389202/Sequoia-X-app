@@ -5,8 +5,10 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -93,6 +95,10 @@ def _run_checked(args: list[str]) -> None:
     subprocess.run(args, check=True)
 
 
+def _default_update_date() -> str:
+    return datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
 def main() -> int:
     settings = get_settings()
     parser = argparse.ArgumentParser(
@@ -111,7 +117,7 @@ def main() -> int:
 
     python = sys.executable
     if not args.skip_update:
-        _run_checked([python, "update_today_data.py"])
+        _run_checked([python, "update_today_data.py", "--date", args.date or _default_update_date()])
     if not args.skip_strategy:
         _run_checked([python, "main.py", "--skip-sync", "--skip-notify"])
 

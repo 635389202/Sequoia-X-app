@@ -168,6 +168,32 @@ def test_main_strategy_subprocess_skips_notify(tmp_path: Path, monkeypatch):
     assert commands == [[sys.executable, "main.py", "--skip-sync", "--skip-notify"]]
 
 
+def test_main_update_subprocess_receives_explicit_date(tmp_path: Path, monkeypatch):
+    delta = _fake_delta_zip(tmp_path)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(publish_daily_release, "get_settings", lambda: type("Settings", (), {"db_path": "db.sqlite"})())
+    monkeypatch.setattr(publish_daily_release, "export_delta_package", lambda *args, **kwargs: delta)
+    monkeypatch.setattr(publish_daily_release, "count_candidates_from_zip_manifest", lambda path: 3)
+    monkeypatch.setattr(publish_daily_release, "_run_checked", lambda args: commands.append(args))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "publish_daily_release.py",
+            "--skip-strategy",
+            "--dry-run",
+            "--export-dir",
+            str(tmp_path),
+            "--date",
+            "2026-07-06",
+        ],
+    )
+
+    assert publish_daily_release.main() == 0
+
+    assert commands == [[sys.executable, "update_today_data.py", "--date", "2026-07-06"]]
+
+
 def test_main_include_full_adds_full_asset_to_manifest(tmp_path: Path, monkeypatch, capsys):
     delta = _fake_delta_zip(tmp_path)
     full = _fake_full_zip(tmp_path)
